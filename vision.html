@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Vision Systems – Industrial Automation</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    body { background:#0d0d0d; color:#eaeaea; font-family:system-ui; }
+    .container { max-width:1000px; margin:auto; padding:48px 24px; }
+    h1, h2 { margin-top:48px; }
+    p { color:#bdbdbd; line-height:1.6; }
+    ul { color:#bdbdbd; }
+    .flow { display:flex; gap:12px; flex-wrap:wrap; margin-top:16px; }
+    .card {
+      border:1px solid #2a2a2a;
+      padding:14px;
+      border-radius:6px;
+      background:#151515;
+      min-width:140px;
+      text-align:center;
+    }
+    .highlight {
+      background:#1e1e1e;
+      border-left:4px solid #1e88e5;
+      padding:16px;
+      margin-top:24px;
+    }
+    .button {
+      display:inline-block;
+      margin-top:20px;
+      padding:10px 16px;
+      background:#1e88e5;
+      color:#fff;
+      text-decoration:none;
+      border-radius:4px;
+    }
+    iframe {
+      width:100%;
+      height:520px;
+      border:1px solid #2a2a2a;
+      border-radius:6px;
+      margin-top:24px;
+    }
+  </style>
+</head>
+
+<body>
+<div class="container">
+
+<h1>Vision Systems in Industrial Automation</h1>
+<p>
+In industrial environments, vision systems are not judged by accuracy alone.
+They are judged by determinism, timing predictability, and how reliably they
+communicate decisions to automation logic.
+</p>
+
+<!-- PROBLEM -->
+<h2>Why Vision Systems Fail on the Factory Floor</h2>
+<ul>
+  <li>Lighting variation and reflections</li>
+  <li>Part vibration and inconsistent positioning</li>
+  <li>Non-deterministic inference latency</li>
+  <li>Unstable OK / NG signaling to PLCs</li>
+</ul>
+
+<p>
+Most failures are not algorithmic — they are system-level failures.
+</p>
+
+<!-- PHILOSOPHY -->
+<h2>Design Philosophy</h2>
+<div class="highlight">
+  <strong>Determinism &gt; Raw Accuracy</strong><br>
+  Any uncertainty, timing violation, or ambiguous result must fail safe (NG).
+</div>
+
+<ul>
+  <li>Fixed cycle-time budgets</li>
+  <li>Binary decisions only (OK / NG)</li>
+  <li>Signal latching compatible with PLC scan cycles</li>
+  <li>No asynchronous ambiguity</li>
+</ul>
+
+<!-- ARCHITECTURE -->
+<h2>System Architecture</h2>
+<div class="flow">
+  <div class="card">External Trigger<br><small>Sensor / PLC</small></div>
+  <div class="card">Image Capture<br><small>Locked exposure</small></div>
+  <div class="card">Vision Logic<br><small>Rule / ML</small></div>
+  <div class="card">Decision Gate<br><small>OK / NG</small></div>
+  <div class="card">Signal Latch<br><small>PLC Read</small></div>
+</div>
+
+<!-- STAR SECTION -->
+<h2>Deterministic Vision → PLC Decision Emulator</h2>
+<p>
+To demonstrate this philosophy, I built a browser-based emulator that models
+a real industrial vision pipeline — including timing enforcement, fail-safe
+logic, and PLC-style signal behavior.
+</p>
+
+<ul>
+  <li>Explicit state machine (IDLE → LATCHED)</li>
+  <li>Cycle-time budget enforcement</li>
+  <li>Forced NG on uncertainty or timeout</li>
+  <li>Signal latching for stable PLC sampling</li>
+  <li>Failure injection (delay, low confidence)</li>
+</ul>
+
+<iframe src="simulator.html"></iframe>
+
+<a class="button" href="simulator.html" target="_blank">
+Open Emulator in New Tab →
+</a>
+
+<!-- PROOF -->
+<h2>What This Demonstrates</h2>
+<ul>
+  <li>System-level thinking beyond image processing</li>
+  <li>Understanding of industrial automation constraints</li>
+  <li>Deterministic decision modeling</li>
+  <li>Fail-safe engineering mindset</li>
+</ul>
+
+<!-- INDUSTRIAL CONTEXT -->
+<h2>Industrial Relevance</h2>
+<p>
+The same decision pipeline can be extended to production systems using
+industrial cameras, digital I/O modules, fieldbus communication, and PLC-based
+reject mechanisms. The emulator mirrors how such systems behave under real
+cycle-time and reliability constraints.
+</p>
+
+<a class="button" href="https://github.com/naman2328" target="_blank">
+View Code on GitHub →
+</a>
+
+</div>
+</body>
+</html>
