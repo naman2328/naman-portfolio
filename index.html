@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Deterministic Vision → PLC Emulator</title>
+
+<style>
+body {
+  background:#0b0b0b;
+  color:#eaeaea;
+  font-family: system-ui, monospace;
+  padding:40px;
+}
+
+h1 { margin-bottom:6px; }
+p { color:#aaa; max-width:760px; }
+
+.panel {
+  background:#151515;
+  border:1px solid #2a2a2a;
+  border-radius:6px;
+  padding:20px;
+  margin-top:24px;
+  max-width:900px;
+}
+
+.states span {
+  padding:6px 10px;
+  border:1px solid #333;
+  margin-right:6px;
+  border-radius:4px;
+  opacity:.4;
+}
+.active {
+  background:#1e88e5;
+  opacity:1;
+}
+
+button {
+  background:#1e88e5;
+  color:#fff;
+  border:none;
+  padding:10px 16px;
+  border-radius:4px;
+  cursor:pointer;
+  margin-right:8px;
+}
+
+.fail { background:#b71c1c; }
+
+.signal {
+  font-size:22px;
+  font-weight:bold;
+  margin-top:16px;
+}
+.OK { color:#4caf50; }
+.NG { color:#f44336; }
+
+table {
+  width:100%;
+  margin-top:20px;
+  border-collapse:collapse;
+  font-size:13px;
+}
+th, td {
+  border:1px solid #333;
+  padding:6px;
+  text-align:center;
+}
+th { background:#222; }
+
+.status-ok { color:#4caf50; }
+.status-bad { color:#f44336; }
+</style>
+</head>
+
+<body>
+
+<h1>Vision → PLC Decision Emulator (V2)</h1>
+<p>
+Deterministic industrial vision pipeline with enforced cycle-time,
+fail-safe OK/NG logic, and PLC-style signal latching.
+</p>
+
+<div class="panel">
+  <div class="states" id="states"></div>
+
+  <button onclick="startCycle()">External Trigger</button>
+  <button class="fail" onclick="inject('confidence')">Inject Low Confidence</button>
+  <button class="fail" onclick="inject('delay')">Inject Delay Spike</button>
+
+  <div class="signal" id="signal">—</div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>#</th><th>Decision</th><th>Confidence</th>
+        <th>Cycle (ms)</th><th>Reason</th>
+      </tr>
+    </thead>
+    <tbody id="log"></tbody>
+  </table>
+</div>
+
+<script>
+const STATES = ["IDLE","TRIGGERED","CAPTURE","PROCESS","DECISION","LATCHED"];
+const BUDGET = 60;
+
+let current = "IDLE";
+let fault = null;
+let count = 0;
+
+function renderStates(){
+  const el = document.getElementById("states");
+  el.innerHTML="";
+  STATES.forEach(s=>{
+    const span=document.createElement("span");
+    span.textContent=s;
+    if(s===current) span.classList.add("active");
+    el.appendChild(span);
+  });
+}
+
+function setState(s){ current=s; renderStates(); }
+
+function delay(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+function inject(type){ fault = type; }
+
+async function startCycle(){
+  if(current!=="IDLE") return;
+
+  fault ??= null;
+  const t0 = performance.now();
+
+  setState("TRIGGERED");
+  await delay(5);
+
+  setState("CAPTURE");
+  await delay(20);
+
+  setState("PROCESS");
+  await delay(fault==="delay"?50:30);
+
+  setState("DECISION");
+  await delay(2);
+
+  let confidence = fault==="confidence"?0.6:Math.random()*0.3+0.7;
+  let decision = confidence>=0.9?"OK":"NG";
+  let reason = decision==="OK"?"Within limits":"Low confidence";
+
+  const cycle = Math.round(performance.now()-t0);
+  if(cycle>BUDGET){
+    decision="NG";
+    reason="Cycle exceeded";
+  }
+
+  setState("LATCHED");
+  document.getElementById("signal").textContent=decision;
+  document.getElementById("signal").className="signal "+decision;
+
+  log(decision,confidence.toFixed(2),cycle,reason);
+
+  await delay(50);
+  setState("IDLE");
+  fault=null;
+}
+
+function log(d,c,t,r){
+  count++;
+  const tr=document.createElement("tr");
+  tr.innerHTML=`<td>${count}</td><td>${d}</td><td>${c}</td><td>${t}</td><td>${r}</td>`;
+  document.getElementById("log").prepend(tr);
+}
+
+renderStates();
+</script>
+
+</body>
+</html>
