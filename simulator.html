@@ -1,295 +1,1598 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Deterministic Vision → PLC Emulator</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Naman — Vision Systems & Robotics</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Martian+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-<style>
-body {
-  background:#0b0b0b;
-  color:#eaeaea;
-  font-family: system-ui, monospace;
-  padding:40px;
-}
+        :root {
+            --void: #000000;
+            --obsidian: #0d0d0d;
+            --charcoal: #1a1a1a;
+            --steel: #2a2a2a;
+            --silver: #e0e0e0;
+            --chrome: #ffffff;
+            --cyan-glow: #00ffff;
+            --magenta-shock: #ff00ff;
+            --lime-pulse: #ccff00;
+            --amber-warn: #ffaa00;
+            --crimson: #ff0055;
+        }
 
-h1 { margin-bottom:6px; }
-p { color:#aaa; max-width:800px; }
+        html {
+            scroll-behavior: smooth;
+        }
 
-.panel {
-  background:#151515;
-  border:1px solid #2a2a2a;
-  border-radius:6px;
-  padding:20px;
-  margin-top:24px;
-  max-width:1000px;
-}
+        body {
+            font-family: 'Syne', sans-serif;
+            background: var(--void);
+            color: var(--chrome);
+            overflow-x: hidden;
+            position: relative;
+        }
 
-.states span {
-  padding:6px 10px;
-  border:1px solid #333;
-  margin-right:6px;
-  border-radius:4px;
-  opacity:.4;
-}
-.active {
-  background:#1e88e5;
-  opacity:1;
-}
+        /* CUSTOM CURSOR - Desktop only, smaller size */
+        @media (pointer: fine) {
+            body {
+                cursor: none;
+            }
 
-button {
-  background:#1e88e5;
-  color:#fff;
-  border:none;
-  padding:10px 16px;
-  border-radius:4px;
-  cursor:pointer;
-  margin-right:8px;
-  margin-top:10px;
-}
+            #cursor {
+                width: 12px;
+                height: 12px;
+                border: 1.5px solid var(--cyan-glow);
+                border-radius: 50%;
+                position: fixed;
+                pointer-events: none;
+                z-index: 10000;
+                transition: all 0.15s cubic-bezier(0.75, 0, 0.25, 1);
+                mix-blend-mode: difference;
+            }
 
-.fail { background:#b71c1c; }
+            #cursor-trail {
+                width: 4px;
+                height: 4px;
+                background: var(--cyan-glow);
+                border-radius: 50%;
+                position: fixed;
+                pointer-events: none;
+                z-index: 9999;
+                transition: all 0.25s cubic-bezier(0.75, 0, 0.25, 1);
+                box-shadow: 0 0 15px var(--cyan-glow);
+            }
 
-.signal {
-  font-size:22px;
-  font-weight:bold;
-  margin-top:16px;
-}
-.OK { color:#4caf50; }
-.NG { color:#f44336; }
+            body.cursor-hover #cursor {
+                width: 40px;
+                height: 40px;
+                border-color: var(--magenta-shock);
+                background: rgba(255, 0, 255, 0.05);
+            }
+        }
 
-.timeline-row {
-  display:flex;
-  align-items:center;
-  margin:6px 0;
-  font-size:13px;
-}
+        /* Hide cursor elements on mobile */
+        @media (pointer: coarse) {
+            #cursor, #cursor-trail {
+                display: none;
+            }
+        }
 
-.bar {
-  height:14px;
-  margin:0 10px;
-  border-radius:3px;
-}
+        /* PARTICLE CANVAS - Less intensive on mobile */
+        #particle-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            pointer-events: none;
+        }
 
-.capture { background:#4caf50; }
-.process { background:#2196f3; }
-.decision { background:#ff9800; }
+        /* SCAN LINE - Disabled on mobile for performance */
+        @media (min-width: 769px) {
+            .scanline {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: repeating-linear-gradient(
+                    0deg,
+                    rgba(0, 255, 255, 0.02) 0px,
+                    transparent 1px,
+                    transparent 2px,
+                    rgba(0, 255, 255, 0.02) 3px
+                );
+                pointer-events: none;
+                z-index: 9998;
+                animation: scanlineMove 8s linear infinite;
+            }
 
-.budget-ok { color:#4caf50; }
-.budget-bad { color:#f44336; }
+            @keyframes scanlineMove {
+                0% { transform: translateY(0); }
+                100% { transform: translateY(100px); }
+            }
+        }
 
-table {
-  width:100%;
-  margin-top:20px;
-  border-collapse:collapse;
-  font-size:13px;
-}
-th, td {
-  border:1px solid #333;
-  padding:6px;
-  text-align:center;
-}
-th { background:#222; }
-</style>
+        /* VIGNETTE */
+        body::after {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at center, transparent 0%, rgba(0, 0, 0, 0.7) 100%);
+            pointer-events: none;
+            z-index: 9997;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 1.5rem;
+            position: relative;
+            z-index: 10;
+        }
+
+        @media (min-width: 769px) {
+            .container {
+                padding: 0 3rem;
+            }
+        }
+
+        /* LOADING SCREEN */
+        #loader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--void);
+            z-index: 99999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 2rem;
+            transition: opacity 0.5s, visibility 0.5s;
+        }
+
+        #loader.hidden {
+            opacity: 0;
+            visibility: hidden;
+        }
+
+        .loader-text {
+            font-family: 'Martian Mono', monospace;
+            font-size: clamp(0.7rem, 2vw, 0.9rem);
+            color: var(--cyan-glow);
+            letter-spacing: 0.3em;
+            text-transform: uppercase;
+            text-align: center;
+            padding: 0 1rem;
+        }
+
+        .loader-bar {
+            width: min(300px, 80vw);
+            height: 2px;
+            background: var(--steel);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .loader-progress {
+            height: 100%;
+            background: linear-gradient(90deg, var(--cyan-glow), var(--magenta-shock));
+            width: 0%;
+            animation: loadProgress 2s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+        }
+
+        @keyframes loadProgress {
+            to { width: 100%; }
+        }
+
+        /* HEADER */
+        header {
+            padding: 1.5rem 0;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            z-index: 1000;
+            background: linear-gradient(180deg, rgba(0, 0, 0, 0.95) 0%, transparent 100%);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(0, 255, 255, 0.1);
+        }
+
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        @media (min-width: 769px) {
+            header {
+                padding: 2rem 0;
+            }
+            .header-content {
+                padding: 0 3rem;
+            }
+        }
+
+        .logo {
+            font-family: 'Martian Mono', monospace;
+            font-size: clamp(0.7rem, 2vw, 0.85rem);
+            color: var(--cyan-glow);
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            position: relative;
+        }
+
+        .logo::before {
+            content: '//';
+            margin-right: 0.5rem;
+            color: var(--magenta-shock);
+        }
+
+        nav {
+            display: flex;
+            gap: 1.5rem;
+        }
+
+        @media (min-width: 769px) {
+            nav {
+                gap: 3rem;
+            }
+        }
+
+        nav a {
+            font-family: 'Martian Mono', monospace;
+            font-size: clamp(0.65rem, 1.5vw, 0.75rem);
+            color: var(--silver);
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            position: relative;
+            transition: color 0.3s;
+        }
+
+        nav a::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 0;
+            width: 0;
+            height: 1px;
+            background: var(--cyan-glow);
+            transition: width 0.3s cubic-bezier(0.65, 0, 0.35, 1);
+        }
+
+        nav a:hover {
+            color: var(--cyan-glow);
+        }
+
+        nav a:hover::after {
+            width: 100%;
+        }
+
+        /* HERO */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 6rem 0 4rem;
+            position: relative;
+        }
+
+        @media (min-width: 769px) {
+            .hero {
+                padding: 8rem 0;
+            }
+        }
+
+        .hero-content {
+            text-align: center;
+            max-width: 1200px;
+        }
+
+        .hero-label {
+            font-family: 'Martian Mono', monospace;
+            font-size: clamp(0.65rem, 1.8vw, 0.8rem);
+            color: var(--lime-pulse);
+            text-transform: uppercase;
+            letter-spacing: 0.3em;
+            margin-bottom: 2rem;
+            opacity: 0;
+            animation: fadeInUp 1s cubic-bezier(0.16, 1, 0.3, 1) 0.5s forwards;
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .hero-title {
+            font-size: clamp(2.5rem, 10vw, 8rem);
+            font-weight: 800;
+            line-height: 0.95;
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.04em;
+            position: relative;
+        }
+
+        @media (min-width: 769px) {
+            .hero-title {
+                line-height: 0.9;
+            }
+        }
+
+        .title-word {
+            display: inline-block;
+            opacity: 0;
+            transform: translateY(50px);
+            animation: slideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        .title-word:nth-child(1) { animation-delay: 0.7s; }
+        .title-word:nth-child(2) { animation-delay: 0.9s; }
+        .title-word:nth-child(3) { animation-delay: 1.1s; }
+
+        @keyframes slideUp {
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .title-word.vision {
+            background: linear-gradient(135deg, var(--cyan-glow) 0%, var(--chrome) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .title-word.ampersand {
+            color: var(--magenta-shock);
+            font-size: 0.7em;
+            margin: 0 0.1em;
+        }
+
+        .title-word.robotics {
+            background: linear-gradient(135deg, var(--magenta-shock) 0%, var(--amber-warn) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-subtitle {
+            font-size: clamp(1rem, 3vw, 1.3rem);
+            color: var(--silver);
+            font-weight: 400;
+            max-width: 800px;
+            margin: 0 auto 3rem;
+            line-height: 1.7;
+            opacity: 0;
+            animation: fadeInUp 1s cubic-bezier(0.16, 1, 0.3, 1) 1.3s forwards;
+            padding: 0 1rem;
+        }
+
+        .hero-cta {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.8rem;
+            padding: 1.2rem 2.5rem;
+            background: transparent;
+            border: 2px solid var(--cyan-glow);
+            color: var(--cyan-glow);
+            font-family: 'Martian Mono', monospace;
+            font-size: clamp(0.7rem, 1.8vw, 0.85rem);
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            text-decoration: none;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            opacity: 0;
+            animation: fadeInUp 1s cubic-bezier(0.16, 1, 0.3, 1) 1.5s forwards;
+        }
+
+        @media (min-width: 769px) {
+            .hero-cta {
+                padding: 1.5rem 3rem;
+                gap: 1rem;
+            }
+        }
+
+        .hero-cta::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: var(--cyan-glow);
+            transition: left 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            z-index: -1;
+        }
+
+        .hero-cta:hover {
+            color: var(--void);
+            border-color: var(--cyan-glow);
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0, 255, 255, 0.4);
+        }
+
+        .hero-cta:hover::before {
+            left: 0;
+        }
+
+        /* STATS BAR */
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            padding: 3rem 0;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            margin: 4rem 0;
+        }
+
+        @media (min-width: 769px) {
+            .stats-bar {
+                grid-template-columns: repeat(4, 1fr);
+                gap: 2rem;
+                padding: 4rem 0;
+                margin: 6rem 0;
+            }
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 1.5rem;
+            background: linear-gradient(135deg, rgba(0, 255, 255, 0.05), rgba(255, 0, 255, 0.05));
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+            overflow: hidden;
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @media (min-width: 769px) {
+            .stat-item {
+                padding: 2rem;
+            }
+        }
+
+        .stat-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(0, 255, 255, 0.2), transparent);
+            transition: left 0.6s;
+        }
+
+        .stat-item:hover::before {
+            left: 100%;
+        }
+
+        .stat-item:hover {
+            transform: translateY(-10px);
+            border-color: var(--cyan-glow);
+            box-shadow: 0 15px 30px rgba(0, 255, 255, 0.2);
+        }
+
+        .stat-value {
+            font-family: 'Martian Mono', monospace;
+            font-size: clamp(2rem, 6vw, 3.5rem);
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--cyan-glow), var(--magenta-shock));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1;
+            margin-bottom: 0.8rem;
+        }
+
+        .stat-label {
+            font-family: 'Martian Mono', monospace;
+            font-size: clamp(0.65rem, 1.5vw, 0.75rem);
+            color: var(--silver);
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+        }
+
+        /* SECTION HEADERS */
+        .section-header {
+            margin: 6rem 0 3rem;
+            position: relative;
+        }
+
+        @media (min-width: 769px) {
+            .section-header {
+                margin: 8rem 0 4rem;
+            }
+        }
+
+        .section-number {
+            font-family: 'Martian Mono', monospace;
+            font-size: clamp(6rem, 20vw, 15rem);
+            font-weight: 800;
+            position: absolute;
+            top: -3rem;
+            left: -1rem;
+            opacity: 0.03;
+            z-index: -1;
+            line-height: 1;
+            pointer-events: none;
+        }
+
+        @media (min-width: 769px) {
+            .section-number {
+                top: -4rem;
+                left: -2rem;
+            }
+        }
+
+        .section-title {
+            font-size: clamp(2rem, 6vw, 4.5rem);
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--chrome), var(--silver));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 1rem;
+            letter-spacing: -0.02em;
+        }
+
+        .section-subtitle {
+            font-size: clamp(1rem, 2.5vw, 1.2rem);
+            color: var(--silver);
+            font-weight: 400;
+            max-width: 700px;
+            line-height: 1.6;
+        }
+
+        /* PROJECT CARDS */
+        .projects-grid {
+            display: grid;
+            gap: 4rem;
+            margin-bottom: 6rem;
+        }
+
+        @media (min-width: 769px) {
+            .projects-grid {
+                gap: 6rem;
+                margin-bottom: 8rem;
+            }
+        }
+
+        .project-card {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 2rem;
+            padding: 2rem;
+            background: linear-gradient(135deg, rgba(13, 13, 13, 0.9), rgba(26, 26, 26, 0.9));
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+            overflow: hidden;
+            transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+            opacity: 0;
+            transform: translateY(80px);
+        }
+
+        @media (min-width: 1024px) {
+            .project-card {
+                grid-template-columns: 1fr 1.2fr;
+                gap: 4rem;
+                padding: 4rem;
+            }
+        }
+
+        .project-card.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .project-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, rgba(0, 255, 255, 0.08), rgba(255, 0, 255, 0.08));
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+
+        .project-card:hover::before {
+            opacity: 1;
+        }
+
+        @media (min-width: 769px) {
+            .project-card:hover {
+                border-color: var(--cyan-glow);
+                transform: translateY(-15px);
+                box-shadow: 0 30px 80px rgba(0, 255, 255, 0.25);
+            }
+        }
+
+        .project-info {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .project-number {
+            font-family: 'Martian Mono', monospace;
+            font-size: clamp(0.65rem, 1.5vw, 0.75rem);
+            color: var(--lime-pulse);
+            text-transform: uppercase;
+            letter-spacing: 0.25em;
+            margin-bottom: 1rem;
+        }
+
+        .project-title {
+            font-size: clamp(1.5rem, 4vw, 2.5rem);
+            font-weight: 800;
+            margin-bottom: 1rem;
+            line-height: 1.2;
+            background: linear-gradient(135deg, var(--cyan-glow), var(--chrome));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        @media (min-width: 769px) {
+            .project-title {
+                margin-bottom: 1.5rem;
+            }
+        }
+
+        .project-description {
+            font-size: clamp(0.95rem, 2vw, 1.05rem);
+            line-height: 1.7;
+            color: var(--silver);
+            margin-bottom: 1.5rem;
+        }
+
+        @media (min-width: 769px) {
+            .project-description {
+                margin-bottom: 2rem;
+            }
+        }
+
+        .project-metrics {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        @media (min-width: 769px) {
+            .project-metrics {
+                gap: 1.5rem;
+                margin-bottom: 2rem;
+            }
+        }
+
+        .metric {
+            padding: 1rem;
+            background: rgba(0, 255, 255, 0.05);
+            border-left: 2px solid var(--cyan-glow);
+        }
+
+        @media (min-width: 769px) {
+            .metric {
+                padding: 1.5rem;
+                border-left-width: 3px;
+            }
+        }
+
+        .metric-value {
+            font-family: 'Martian Mono', monospace;
+            font-size: clamp(1.3rem, 3vw, 2rem);
+            font-weight: 700;
+            color: var(--cyan-glow);
+            margin-bottom: 0.4rem;
+        }
+
+        .metric-label {
+            font-family: 'Martian Mono', monospace;
+            font-size: clamp(0.6rem, 1.3vw, 0.7rem);
+            color: var(--silver);
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+        }
+
+        .project-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.6rem;
+        }
+
+        @media (min-width: 769px) {
+            .project-tags {
+                gap: 0.8rem;
+            }
+        }
+
+        .tag {
+            font-family: 'Martian Mono', monospace;
+            font-size: clamp(0.6rem, 1.3vw, 0.7rem);
+            padding: 0.5rem 1rem;
+            background: transparent;
+            border: 1px solid var(--magenta-shock);
+            color: var(--magenta-shock);
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @media (min-width: 769px) {
+            .tag {
+                padding: 0.6rem 1.2rem;
+            }
+        }
+
+        .tag:hover {
+            background: var(--magenta-shock);
+            color: var(--void);
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(255, 0, 255, 0.3);
+        }
+
+        .project-media {
+            position: relative;
+            overflow: hidden;
+            background: var(--void);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            order: -1;
+        }
+
+        @media (min-width: 1024px) {
+            .project-media {
+                order: 0;
+            }
+        }
+
+        .project-media::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(45deg, transparent, rgba(0, 255, 255, 0.08), transparent);
+            transform: translateX(-100%);
+            transition: transform 0.8s;
+            z-index: 1;
+        }
+
+        .project-card:hover .project-media::before {
+            transform: translateX(100%);
+        }
+
+        .project-media video,
+        .project-media img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @media (min-width: 769px) {
+            .project-card:hover .project-media video,
+            .project-card:hover .project-media img {
+                transform: scale(1.04);
+            }
+        }
+
+        /* TECH DEEP DIVE */
+        .tech-deep-dive {
+            margin: 2rem 0;
+            padding: 2rem;
+            background: rgba(255, 163, 0, 0.05);
+            border-left: 3px solid var(--amber-warn);
+            position: relative;
+        }
+
+        @media (min-width: 769px) {
+            .tech-deep-dive {
+                margin: 3rem 0;
+                padding: 3rem;
+                border-left-width: 4px;
+            }
+        }
+
+        .tech-deep-dive::before {
+            content: 'TECHNICAL';
+            position: absolute;
+            top: -0.7rem;
+            left: 1.5rem;
+            background: var(--obsidian);
+            padding: 0.3rem 1rem;
+            font-family: 'Martian Mono', monospace;
+            font-size: clamp(0.6rem, 1.3vw, 0.7rem);
+            color: var(--amber-warn);
+            letter-spacing: 0.15em;
+            border: 1px solid var(--amber-warn);
+        }
+
+        .deep-dive-title {
+            font-size: clamp(1rem, 2.5vw, 1.3rem);
+            color: var(--amber-warn);
+            margin-bottom: 1.5rem;
+            font-weight: 700;
+        }
+
+        .insight {
+            padding: 1rem 0;
+            border-bottom: 1px dashed rgba(255, 255, 255, 0.1);
+        }
+
+        @media (min-width: 769px) {
+            .insight {
+                padding: 1.5rem 0;
+            }
+        }
+
+        .insight:last-child {
+            border-bottom: none;
+        }
+
+        .insight-header {
+            font-family: 'Martian Mono', monospace;
+            font-size: clamp(0.7rem, 1.5vw, 0.85rem);
+            color: var(--lime-pulse);
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            margin-bottom: 0.6rem;
+        }
+
+        .insight-text {
+            color: var(--silver);
+            line-height: 1.7;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+        }
+
+        .insight-text strong {
+            color: var(--chrome);
+            font-weight: 700;
+        }
+
+        /* FAILURE SECTION */
+        .failure-matrix {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1.5rem;
+            margin: 4rem 0;
+        }
+
+        @media (min-width: 769px) {
+            .failure-matrix {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 2rem;
+                margin: 6rem 0;
+            }
+        }
+
+        .failure-card {
+            padding: 2rem;
+            background: linear-gradient(135deg, rgba(255, 0, 85, 0.08), transparent);
+            border: 1px solid var(--crimson);
+            position: relative;
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @media (min-width: 769px) {
+            .failure-card {
+                padding: 3rem;
+            }
+        }
+
+        .failure-card::before {
+            content: '!';
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            font-size: 2.5rem;
+            color: var(--crimson);
+            opacity: 0.15;
+            font-weight: 800;
+        }
+
+        @media (min-width: 769px) {
+            .failure-card::before {
+                font-size: 3rem;
+                opacity: 0.2;
+            }
+        }
+
+        .failure-card:hover {
+            transform: translateY(-8px);
+            border-color: var(--crimson);
+            box-shadow: 0 15px 40px rgba(255, 0, 85, 0.25);
+        }
+
+        .failure-label {
+            font-family: 'Martian Mono', monospace;
+            font-size: clamp(0.6rem, 1.3vw, 0.7rem);
+            color: var(--crimson);
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            margin-bottom: 0.8rem;
+        }
+
+        .failure-problem {
+            font-size: clamp(1.1rem, 3vw, 1.5rem);
+            font-weight: 700;
+            color: var(--chrome);
+            margin-bottom: 1rem;
+            line-height: 1.3;
+        }
+
+        .failure-arrow {
+            font-size: 1.5rem;
+            color: var(--cyan-glow);
+            margin: 0.8rem 0;
+        }
+
+        .failure-solution {
+            color: var(--silver);
+            line-height: 1.7;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+        }
+
+        /* FOOTER */
+        footer {
+            padding: 4rem 0;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
+            margin-top: 8rem;
+        }
+
+        @media (min-width: 769px) {
+            footer {
+                padding: 6rem 0;
+                margin-top: 10rem;
+            }
+        }
+
+        .footer-title {
+            font-size: clamp(2rem, 6vw, 3.5rem);
+            font-weight: 800;
+            margin-bottom: 2rem;
+            background: linear-gradient(135deg, var(--cyan-glow), var(--magenta-shock));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .footer-cta {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.8rem;
+            padding: 1.2rem 2.5rem;
+            background: linear-gradient(135deg, var(--cyan-glow), var(--magenta-shock));
+            color: var(--void);
+            font-family: 'Martian Mono', monospace;
+            font-size: clamp(0.7rem, 1.8vw, 0.9rem);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            text-decoration: none;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            margin-bottom: 2rem;
+        }
+
+        @media (min-width: 769px) {
+            .footer-cta {
+                padding: 1.8rem 4rem;
+                gap: 1rem;
+                margin-bottom: 3rem;
+            }
+        }
+
+        .footer-cta::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            background: var(--chrome);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+
+        .footer-cta:hover::before {
+            width: 300%;
+            height: 300%;
+        }
+
+        .footer-cta:hover {
+            transform: scale(1.05);
+            box-shadow: 0 15px 60px rgba(0, 255, 255, 0.5);
+        }
+
+        .footer-cta span {
+            position: relative;
+            z-index: 1;
+        }
+
+        .footer-note {
+            font-family: 'Martian Mono', monospace;
+            font-size: clamp(0.7rem, 1.5vw, 0.8rem);
+            color: var(--silver);
+            letter-spacing: 0.15em;
+        }
+
+        /* Mobile menu toggle (optional) */
+        .mobile-menu-toggle {
+            display: none;
+        }
+
+        @media (max-width: 480px) {
+            nav a {
+                font-size: 0.6rem;
+            }
+        }
+    </style>
 </head>
-
 <body>
+    <!-- CUSTOM CURSOR (Desktop only) -->
+    <div id="cursor"></div>
+    <div id="cursor-trail"></div>
 
-<h1>Vision → PLC Decision Emulator</h1>
-<p>
-Deterministic industrial vision pipeline demonstrating fixed cycle-time behavior,
-fail-safe OK / NG decisions, and PLC-compatible signal latching.
-</p>
+    <!-- PARTICLE CANVAS -->
+    <canvas id="particle-canvas"></canvas>
 
-<div class="panel">
+    <!-- SCANLINE EFFECT -->
+    <div class="scanline"></div>
 
-  <!-- STATE MACHINE -->
-  <div class="states" id="states"></div>
-
-  <!-- CONTROLS -->
-  <button onclick="startCycle()">External Trigger</button>
-  <button class="fail" onclick="inject('confidence')">Inject Low Confidence</button>
-  <button class="fail" onclick="inject('delay')">Inject Delay Spike</button>
-
-  <!-- SIGNAL -->
-  <div class="signal" id="signal">—</div>
-
-  <!-- TIMELINE -->
-  <h3>Cycle-Time Timeline</h3>
-  <div id="timeline"></div>
-  <div id="budgetStatus"></div>
-
-  <!-- LOG -->
-  <table>
-    <thead>
-      <tr>
-        <th>#</th>
-        <th>Decision</th>
-        <th>Confidence</th>
-        <th>Total Cycle (ms)</th>
-        <th>Reason</th>
-      </tr>
-    </thead>
-    <tbody id="log"></tbody>
-  </table>
-
-</div>
-
-<script>
-/* ===============================
-   CONFIGURATION
-================================ */
-const STATES = ["IDLE","TRIGGERED","CAPTURE","PROCESS","DECISION","LATCHED"];
-const CYCLE_BUDGET_MS = 60;
-const CAPTURE_MS = 20;
-const PROCESS_MS = 30;
-const DECISION_MS = 2;
-const SIGNAL_HOLD_MS = 50;
-
-/* ===============================
-   STATE
-================================ */
-let currentState = "IDLE";
-let injectedFault = null;
-let logCount = 0;
-
-/* ===============================
-   UI HELPERS
-================================ */
-function renderStates() {
-  const el = document.getElementById("states");
-  el.innerHTML = "";
-  STATES.forEach(s => {
-    const span = document.createElement("span");
-    span.textContent = s;
-    if (s === currentState) span.classList.add("active");
-    el.appendChild(span);
-  });
-}
-
-function setState(s) {
-  currentState = s;
-  renderStates();
-}
-
-function delay(ms) {
-  return new Promise(res => setTimeout(res, ms));
-}
-
-function inject(type) {
-  injectedFault = type;
-}
-
-/* ===============================
-   PIPELINE
-================================ */
-async function startCycle() {
-  if (currentState !== "IDLE") return;
-
-  injectedFault ??= null;
-  document.getElementById("signal").textContent = "—";
-
-  const tStart = performance.now();
-
-  setState("TRIGGERED");
-  await delay(5);
-
-  setState("CAPTURE");
-  await delay(CAPTURE_MS);
-
-  setState("PROCESS");
-  const processTime = injectedFault === "delay" ? 50 : PROCESS_MS;
-  await delay(processTime);
-
-  setState("DECISION");
-  await delay(DECISION_MS);
-
-  // Vision decision
-  let confidence = injectedFault === "confidence"
-    ? 0.6
-    : (Math.random() * 0.3 + 0.7);
-
-  let decision = confidence >= 0.9 ? "OK" : "NG";
-  let reason = decision === "OK" ? "Within limits" : "Low confidence";
-
-  const totalCycle =
-    CAPTURE_MS + processTime + DECISION_MS;
-
-  if (totalCycle > CYCLE_BUDGET_MS) {
-    decision = "NG";
-    reason = "Cycle-time exceeded";
-  }
-
-  setState("LATCHED");
-  const signalEl = document.getElementById("signal");
-  signalEl.textContent = decision;
-  signalEl.className = "signal " + decision;
-
-  renderTimeline(CAPTURE_MS, processTime, DECISION_MS, totalCycle);
-  renderBudget(totalCycle);
-
-  logResult(decision, confidence.toFixed(2), totalCycle, reason);
-
-  await delay(SIGNAL_HOLD_MS);
-  setState("IDLE");
-  injectedFault = null;
-}
-
-/* ===============================
-   TIMELINE RENDERING
-================================ */
-function renderTimeline(capture, process, decision, total) {
-  const tl = document.getElementById("timeline");
-  tl.innerHTML = `
-    <div class="timeline-row">
-      CAPTURE
-      <div class="bar capture" style="width:${capture * 3}px"></div>
-      ${capture} ms
+    <!-- LOADING SCREEN -->
+    <div id="loader">
+        <div class="loader-text">INITIALIZING</div>
+        <div class="loader-bar">
+            <div class="loader-progress"></div>
+        </div>
     </div>
-    <div class="timeline-row">
-      PROCESS
-      <div class="bar process" style="width:${process * 3}px"></div>
-      ${process} ms
+
+    <!-- HEADER -->
+    <header>
+        <div class="header-content">
+            <div class="logo">NAMAN</div>
+            <nav>
+                <a href="#projects">Work</a>
+                <a href="#failures">Insights</a>
+                <a href="index.html">Home</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- HERO -->
+    <section class="hero">
+        <div class="hero-content">
+            <div class="hero-label">COMPUTER VISION × ROBOTICS</div>
+            <h1 class="hero-title">
+                <span class="title-word vision">VISION</span>
+                <span class="title-word ampersand">×</span>
+                <span class="title-word robotics">ROBOTICS</span>
+            </h1>
+            <p class="hero-subtitle">
+                Building intelligent systems at the intersection of machine vision and robotic automation.
+                From prototypes to production—learning through real-world implementation.
+            </p>
+            <a href="#projects" class="hero-cta">
+                <span>EXPLORE</span>
+                <span>↓</span>
+            </a>
+        </div>
+    </section>
+
+    <div class="container">
+        <!-- STATS -->
+        <div class="stats-bar">
+            <div class="stat-item">
+                <div class="stat-value">95%</div>
+                <div class="stat-label">OCR Accuracy</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value">±2mm</div>
+                <div class="stat-label">Precision</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value">&lt;200ms</div>
+                <div class="stat-label">Processing</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value">4</div>
+                <div class="stat-label">Projects</div>
+            </div>
+        </div>
+
+        <!-- PROJECTS SECTION -->
+        <section id="projects">
+            <div class="section-header">
+                <div class="section-number">01</div>
+                <h2 class="section-title">Featured Work</h2>
+                <p class="section-subtitle">Production-grade systems built through iterative learning</p>
+            </div>
+
+            <div class="projects-grid">
+                <!-- PROJECT 1 -->
+                <article class="project-card">
+                    <div class="project-info">
+                        <div class="project-number">PROJECT_001</div>
+                        <h3 class="project-title">OCR Vision Inspection</h3>
+                        <p class="project-description">
+                            Industrial OCR system on Jetson Orin Nano using PaddleOCR. Tackles real-world challenges:
+                            lighting variations, ROI optimization, and deterministic decision logic.
+                        </p>
+
+                        <div class="project-metrics">
+                            <div class="metric">
+                                <div class="metric-value">~95%</div>
+                                <div class="metric-label">Accuracy</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">&lt;200ms</div>
+                                <div class="metric-label">Inference</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">1080p</div>
+                                <div class="metric-label">Resolution</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">60%</div>
+                                <div class="metric-label">FP Reduction</div>
+                            </div>
+                        </div>
+
+                        <div class="tech-deep-dive">
+                            <div class="deep-dive-title">Key Insights</div>
+                            <div class="insight">
+                                <div class="insight-header">ADAPTIVE PREPROCESSING</div>
+                                <div class="insight-text">
+                                    Factory lighting caused <strong>30% accuracy drop</strong>. Fixed with CLAHE
+                                    normalization across 200-2000 lux range.
+                                </div>
+                            </div>
+                            <div class="insight">
+                                <div class="insight-header">ROI OPTIMIZATION</div>
+                                <div class="insight-text">
+                                    Region-specific processing <strong>cut false positives 60%</strong> via
+                                    template-based tracking.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="project-tags">
+                            <span class="tag">PaddleOCR</span>
+                            <span class="tag">OpenCV</span>
+                            <span class="tag">Python</span>
+                            <span class="tag">Jetson</span>
+                            <span class="tag">CUDA</span>
+                        </div>
+                    </div>
+
+                    <div class="project-media">
+                        <img src="Assets/ocr.jpeg" alt="OCR Vision System">
+                    </div>
+                </article>
+
+                <!-- PROJECT 2 -->
+                <article class="project-card">
+                    <div class="project-info">
+                        <div class="project-number">PROJECT_002</div>
+                        <h3 class="project-title">Vision-Guided Robotics</h3>
+                        <p class="project-description">
+                            Complete pick-and-place system with ROS 2 and Dobot Magician. Explores coordinate
+                            transformation, servo dynamics, and real hardware integration.
+                        </p>
+
+                        <div class="project-metrics">
+                            <div class="metric">
+                                <div class="metric-value">±2mm</div>
+                                <div class="metric-label">Accuracy</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">~3s</div>
+                                <div class="metric-label">Cycle Time</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">30Hz</div>
+                                <div class="metric-label">Vision Rate</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">4-DOF</div>
+                                <div class="metric-label">Manipulator</div>
+                            </div>
+                        </div>
+
+                        <div class="tech-deep-dive">
+                            <div class="deep-dive-title">Key Insights</div>
+                            <div class="insight">
+                                <div class="insight-header">COORDINATE CALIBRATION</div>
+                                <div class="insight-text">
+                                    <strong>Sub-3mm accuracy</strong> via 12-point homography with RANSAC
+                                    outlier rejection.
+                                </div>
+                            </div>
+                            <div class="insight">
+                                <div class="insight-header">TRAJECTORY SMOOTHING</div>
+                                <div class="insight-text">
+                                    Eliminated servo jitter using <strong>cubic spline interpolation</strong>
+                                    with proper acceleration limits.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="project-tags">
+                            <span class="tag">ROS 2</span>
+                            <span class="tag">OpenCV</span>
+                            <span class="tag">Python</span>
+                            <span class="tag">Dobot</span>
+                            <span class="tag">MoveIt</span>
+                        </div>
+                    </div>
+
+                    <div class="project-media">
+                        <video controls loop muted playsinline>
+                            <source src="Assets/dobot.mp4" type="video/mp4">
+                        </video>
+                    </div>
+                </article>
+
+                <!-- PROJECT 3 -->
+                <article class="project-card">
+                    <div class="project-info">
+                        <div class="project-number">PROJECT_003</div>
+                        <h3 class="project-title">Custom Robotic Arm</h3>
+                        <p class="project-description">
+                            4-DOF arm from mechanical design to servo control. Hands-on learning in gear ratios,
+                            torque distribution, and backlash compensation.
+                        </p>
+
+                        <div class="project-metrics">
+                            <div class="metric">
+                                <div class="metric-value">4-DOF</div>
+                                <div class="metric-label">Freedom</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">500g</div>
+                                <div class="metric-label">Payload</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">±5°</div>
+                                <div class="metric-label">Repeatability</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">3:1</div>
+                                <div class="metric-label">Gear Ratio</div>
+                            </div>
+                        </div>
+
+                        <div class="tech-deep-dive">
+                            <div class="deep-dive-title">Key Insights</div>
+                            <div class="insight">
+                                <div class="insight-header">BACKLASH MITIGATION</div>
+                                <div class="insight-text">
+                                    Reduced positioning error from <strong>±15° to ±5°</strong> via 0.1mm
+                                    tolerances and spring tensioning.
+                                </div>
+                            </div>
+                            <div class="insight">
+                                <div class="insight-header">S-CURVE PROFILES</div>
+                                <div class="insight-text">
+                                    PWM control with <strong>acceleration smoothing</strong> minimized
+                                    mechanical shock during motion.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="project-tags">
+                            <span class="tag">Python</span>
+                            <span class="tag">Servos</span>
+                            <span class="tag">CAD</span>
+                            <span class="tag">PWM</span>
+                            <span class="tag">3D Print</span>
+                        </div>
+                    </div>
+
+                    <div class="project-media">
+                        <video controls loop muted playsinline>
+                            <source src="Assets/arm.mp4" type="video/mp4">
+                        </video>
+                    </div>
+                </article>
+
+                <!-- PROJECT 4 -->
+                <article class="project-card">
+                    <div class="project-info">
+                        <div class="project-number">PROJECT_004</div>
+                        <h3 class="project-title">Holonomic Drive Robot</h3>
+                        <p class="project-description">
+                            Mecanum wheel platform exploring omnidirectional motion. Inverse kinematics,
+                            motor synchronization, and friction analysis.
+                        </p>
+
+                        <div class="project-metrics">
+                            <div class="metric">
+                                <div class="metric-value">360°</div>
+                                <div class="metric-label">Movement</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">0.5m/s</div>
+                                <div class="metric-label">Max Speed</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">±3cm</div>
+                                <div class="metric-label">Path Error</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value">100Hz</div>
+                                <div class="metric-label">Control</div>
+                            </div>
+                        </div>
+
+                        <div class="tech-deep-dive">
+                            <div class="deep-dive-title">Key Insights</div>
+                            <div class="insight">
+                                <div class="insight-header">MOTOR SYNC</div>
+                                <div class="insight-text">
+                                    4-motor synchronization at <strong>100Hz via PID</strong> (Ki=0.02)
+                                    with encoder feedback.
+                                </div>
+                            </div>
+                            <div class="insight">
+                                <div class="insight-header">FRICTION DYNAMICS</div>
+                                <div class="insight-text">
+                                    Measured <strong>5cm/m drift</strong> under acceleration. Dust caused
+                                    20% efficiency drop after 10hrs.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="project-tags">
+                            <span class="tag">Python</span>
+                            <span class="tag">Drivers</span>
+                            <span class="tag">Kinematics</span>
+                            <span class="tag">Mecanum</span>
+                            <span class="tag">PID</span>
+                        </div>
+                    </div>
+
+                    <div class="project-media">
+                        <video controls loop muted playsinline>
+                            <source src="Assets/omni_demo.mp4" type="video/mp4">
+                        </video>
+                    </div>
+                </article>
+            </div>
+        </section>
+
+        <!-- FAILURE ANALYSIS -->
+        <section id="failures">
+            <div class="section-header">
+                <div class="section-number">02</div>
+                <h2 class="section-title">Failure Analysis</h2>
+                <p class="section-subtitle">Real challenges and practical solutions</p>
+            </div>
+
+            <div class="failure-matrix">
+                <div class="failure-card">
+                    <div class="failure-label">ISSUE_01</div>
+                    <div class="failure-problem">Glare & Reflections</div>
+                    <div class="failure-arrow">⟿</div>
+                    <div class="failure-solution">
+                        ROI masking, polarized filters at 45°, adaptive CLAHE. Normalized 200-2000 lux range.
+                    </div>
+                </div>
+
+                <div class="failure-card">
+                    <div class="failure-label">ISSUE_02</div>
+                    <div class="failure-problem">False Positives</div>
+                    <div class="failure-arrow">⟿</div>
+                    <div class="failure-solution">
+                        Multi-stage validation: confidence check → fuzzy matching → geometric constraints.
+                        Reduced FP from 15% to &lt;2%.
+                    </div>
+                </div>
+
+                <div class="failure-card">
+                    <div class="failure-label">ISSUE_03</div>
+                    <div class="failure-problem">Processing Latency</div>
+                    <div class="failure-arrow">⟿</div>
+                    <div class="failure-solution">
+                        GPU acceleration, INT8 quantization, strategic frame skipping.
+                        Cut latency from 800ms to &lt;200ms.
+                    </div>
+                </div>
+
+                <div class="failure-card">
+                    <div class="failure-label">ISSUE_04</div>
+                    <div class="failure-problem">Camera Instability</div>
+                    <div class="failure-arrow">⟿</div>
+                    <div class="failure-solution">
+                        State machine with timeouts, retry logic (max 3), IMU fusion for vibration.
+                        Achieved 99.5% capture success.
+                    </div>
+                </div>
+            </div>
+        </section>
     </div>
-    <div class="timeline-row">
-      DECISION
-      <div class="bar decision" style="width:${decision * 3}px"></div>
-      ${decision} ms
-    </div>
-  `;
-}
 
-function renderBudget(total) {
-  const el = document.getElementById("budgetStatus");
-  if (total <= CYCLE_BUDGET_MS) {
-    el.textContent = `Total Cycle: ${total} ms (Within ${CYCLE_BUDGET_MS} ms budget)`;
-    el.className = "budget-ok";
-  } else {
-    el.textContent = `Total Cycle: ${total} ms (EXCEEDED → Forced NG)`;
-    el.className = "budget-bad";
-  }
-}
+    <!-- FOOTER -->
+    <footer>
+        <div class="container">
+            <h2 class="footer-title">Explore More</h2>
+            <a href="simulator.html" class="footer-cta">
+                <span>VIEW SIMULATOR</span>
+                <span>→</span>
+            </a>
+            <p class="footer-note">PRODUCTION-GRADE LEARNING</p>
+        </div>
+    </footer>
 
-/* ===============================
-   LOGGING
-================================ */
-function logResult(decision, confidence, cycle, reason) {
-  logCount++;
-  const tr = document.createElement("tr");
-  tr.innerHTML = `
-    <td>${logCount}</td>
-    <td>${decision}</td>
-    <td>${confidence}</td>
-    <td>${cycle}</td>
-    <td>${reason}</td>
-  `;
-  document.getElementById("log").prepend(tr);
-}
+    <script>
+        // LOADER
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                document.getElementById('loader').classList.add('hidden');
+            }, 2000);
+        });
 
-/* ===============================
-   INIT
-================================ */
-renderStates();
-</script>
+        // CUSTOM CURSOR (Desktop only)
+        if (window.matchMedia("(pointer: fine)").matches) {
+            const cursor = document.getElementById('cursor');
+            const cursorTrail = document.getElementById('cursor-trail');
 
+            document.addEventListener('mousemove', (e) => {
+                cursor.style.left = e.clientX + 'px';
+                cursor.style.top = e.clientY + 'px';
+                
+                setTimeout(() => {
+                    cursorTrail.style.left = e.clientX + 'px';
+                    cursorTrail.style.top = e.clientY + 'px';
+                }, 80);
+            });
+
+            const interactiveElements = document.querySelectorAll('a, button, .project-card, .stat-item, .failure-card, .tag');
+            interactiveElements.forEach(el => {
+                el.addEventListener('mouseenter', () => {
+                    document.body.classList.add('cursor-hover');
+                });
+                el.addEventListener('mouseleave', () => {
+                    document.body.classList.remove('cursor-hover');
+                });
+            });
+        }
+
+        // PARTICLE SYSTEM (Adjusted for mobile performance)
+        const canvas = document.getElementById('particle-canvas');
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const isMobile = window.innerWidth < 769;
+        const particleCount = isMobile ? 30 : 80;
+
+        class Particle {
+            constructor() {
+                this.reset();
+            }
+
+            reset() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.vx = (Math.random() - 0.5) * 0.4;
+                this.vy = (Math.random() - 0.5) * 0.4;
+                this.size = Math.random() * 1.5;
+                this.opacity = Math.random() * 0.4;
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+
+                if (this.x < 0 || this.x > canvas.width || this.y < 0 || this.y > canvas.height) {
+                    this.reset();
+                }
+            }
+
+            draw() {
+                ctx.fillStyle = `rgba(0, 255, 255, ${this.opacity})`;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        const particles = Array.from({ length: particleCount }, () => new Particle());
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            particles.forEach(particle => {
+                particle.update();
+                particle.draw();
+            });
+
+            // Draw connections (fewer on mobile)
+            const maxDistance = isMobile ? 100 : 150;
+            particles.forEach((p1, i) => {
+                particles.slice(i + 1).forEach(p2 => {
+                    const dx = p1.x - p2.x;
+                    const dy = p1.y - p2.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < maxDistance) {
+                        ctx.strokeStyle = `rgba(0, 255, 255, ${0.08 * (1 - distance / maxDistance)})`;
+                        ctx.lineWidth = 0.5;
+                        ctx.beginPath();
+                        ctx.moveTo(p1.x, p1.y);
+                        ctx.lineTo(p2.x, p2.y);
+                        ctx.stroke();
+                    }
+                });
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        animate();
+
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+
+        // SCROLL ANIMATIONS
+        const observerOptions = {
+            threshold: 0.15,
+            rootMargin: '0px 0px -80px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('.project-card').forEach(el => {
+            observer.observe(el);
+        });
+
+        // SMOOTH SCROLL
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        });
+    </script>
 </body>
 </html>
